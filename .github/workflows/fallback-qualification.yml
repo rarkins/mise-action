@@ -1,0 +1,35 @@
+name: Qualify pinned mise API fallback
+on:
+  push:
+    branches: [codex/mise-api-qualification]
+permissions:
+  contents: read
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.22.2
+          package-manager-cache: false
+      - name: Build from the pinned action dependency lock
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/aube"
+          curl -fsSL --max-time 60 -H 'Accept: application/octet-stream' \
+            https://api.github.com/repos/aubepkg/aube/releases/assets/692778584 \
+            -o "$RUNNER_TEMP/aube.tar.gz"
+          printf 'bda6a85ac51b11930f92150d51a2d749ea85d0894195056c9e5a52747b56695a  %s\n' \
+            "$RUNNER_TEMP/aube.tar.gz" | sha256sum -c
+          tar -xzf "$RUNNER_TEMP/aube.tar.gz" -C "$RUNNER_TEMP/aube"
+          aube=$(find "$RUNNER_TEMP/aube" -type f -name aube -print -quit)
+          "$aube" ci
+          npm run package
+      - name: Force HTTP 504 on fresh and warm installs
+        run: node scripts/test-release-api-fallback.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
